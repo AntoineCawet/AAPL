@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuantStrat - ML Trading</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <div id="loadingText">Chargement...</div>
+    </div>
+
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">Q</div>
+            <h1>QUANT<span class="accent">STRAT</span></h1>
+        </div>
+        <div style="color: var(--text-secondary); font-size: 12px;">
+            AAPL: <span id="headerPrice" style="color: var(--accent-orange); font-weight: 600;">—</span>
+        </div>
+    </header>
+
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('backtest')">◈ Backtest</div>
+        <div class="tab" onclick="switchTab('signal')">◉ Signal Live</div>
+        <div class="tab" onclick="switchTab('montecarlo')">◊ Monte Carlo</div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <!-- TAB: BACKTEST -->
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <div class="tab-content active" id="tab-backtest">
+        <div class="controls">
+            <div class="control-group">
+                <label>Frais de transaction</label>
+                <select id="transaction_cost">
+                    <option value="0.0001">0.01%</option>
+                    <option value="0.0005">0.05%</option>
+                    <option value="0.001" selected>0.10%</option>
+                    <option value="0.005">0.50%</option>
+                </select>
+            </div>
+            <button class="btn ml-auto" onclick="runBacktest()">RUN BACKTEST</button>
+        </div>
+
+        <div class="container">
+            <div class="info-banner" id="testPeriod" style="display: none;">
+                <div class="info-badge">TEST PERIOD</div>
+                <span id="testPeriodText"></span>
+            </div>
+
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-label">Sharpe Strategy</div>
+                    <div class="kpi-value neutral" id="sharpeValue">—</div>
+                    <div class="kpi-sub" id="sharpeBH">B&H: —</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">P&L Strategy</div>
+                    <div class="kpi-value" id="pnlValue">—</div>
+                    <div class="kpi-sub" id="pnlBH">B&H: —</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Max Drawdown</div>
+                    <div class="kpi-value" id="mddValue">—</div>
+                    <div class="kpi-sub" id="mddBH">B&H: —</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Trades</div>
+                    <div class="kpi-value" id="tradesCount">—</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">Portfolio Performance</div>
+                <div id="portfolioChart" style="height: 380px;">
+                    <div class="empty-state"><p>Cliquez sur RUN BACKTEST</p></div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">P&L Mensuel</div>
+                <div id="monthlyChart" style="height: 240px;">
+                    <div class="empty-state"><p>—</p></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <!-- TAB: SIGNAL LIVE -->
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-signal">
+        <div class="controls">
+            <span style="color: var(--text-secondary); font-size: 11px;">
+                Signal généré par le modèle pré-entraîné
+            </span>
+            <button class="btn ml-auto" onclick="loadSignal()">ACTUALISER</button>
+        </div>
+
+        <div class="container">
+            <div class="signal-card">
+                <div class="kpi-label">Signal Actuel</div>
+                <div class="signal-value hold" id="signalValue">—</div>
+                <div class="signal-details">
+                    <div>Confiance: <span id="signalConfidence">—</span></div>
+                    <div>Prix: <span id="signalPrice">—</span></div>
+                    <div>Régime: <span id="signalRegime">—</span></div>
+                    <div>Date: <span id="signalDate">—</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <!-- TAB: MONTE CARLO -->
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-montecarlo">
+        <div class="controls">
+            <div class="control-group">
+                <label>Méthode</label>
+                <select id="mc_method">
+                    <option value="simplified">Simplifié (régime SMA)</option>
+                    <option value="ml">GBM + ML (RandomForest)</option>
+                    <option value="garch" selected>GARCH + ML (le plus réaliste)</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Horizon</label>
+                <select id="mc_horizon">
+                    <option value="1mo">1 mois</option>
+                    <option value="2mo">2 mois</option>
+                    <option value="6mo" selected>6 mois</option>
+                    <option value="1y">1 an</option>
+                    <option value="5y">5 ans</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Simulations</label>
+                <select id="mc_simulations">
+                    <option value="50">50</option>
+                    <option value="100" selected>100</option>
+                    <option value="200">200</option>
+                    <option value="300">300</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Frais</label>
+                <select id="mc_cost">
+                    <option value="0.0001">0.01%</option>
+                    <option value="0.001" selected>0.10%</option>
+                    <option value="0.005">0.50%</option>
+                </select>
+            </div>
+            <button class="btn ml-auto" onclick="runMonteCarlo()">SIMULER</button>
+        </div>
+
+        <div class="container">
+            <div class="explanation-box" id="mcExplanation">
+                <h3>◊ Monte Carlo avec Vrai Modèle ML</h3>
+                <ul>
+                    <li><strong>Calcul complet des features:</strong> RSI, MACD, Bollinger, etc. sur chaque trajectoire simulée</li>
+                    <li><strong>Vrai modèle RandomForest:</strong> Utilise le modèle pré-entraîné pour générer les signaux</li>
+                    <li><strong>Plus réaliste:</strong> Teste vraiment si les patterns ML fonctionnent sur données simulées</li>
+                    <li><strong>Plus lent:</strong> ~10x plus lent que la version simplifiée (50-200 simulations recommandées)</li>
+                </ul>
+            </div>
+
+            <div class="info-banner" id="mcInfo" style="display: none;">
+                <div class="info-badge">GBM</div>
+                <span id="mcInfoText"></span>
+            </div>
+
+            <div class="kpi-grid" id="mcKpis" style="display: none;">
+                <div class="kpi-card">
+                    <div class="kpi-label">P(Profit) Stratégie</div>
+                    <div class="kpi-value positive" id="mcProbProfit">—</div>
+                    <div class="prob-bar"><div class="prob-bar-fill" id="mcProbProfitBar" style="background: var(--accent-green);"></div></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">P(Battre B&H)</div>
+                    <div class="kpi-value" id="mcProbBeat">—</div>
+                    <div class="prob-bar"><div class="prob-bar-fill" id="mcProbBeatBar" style="background: var(--accent-gold);"></div></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Rendement Moyen</div>
+                    <div class="kpi-value" id="mcMeanReturn">—</div>
+                    <div class="kpi-sub" id="mcMeanBH">B&H: —</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">VaR 95%</div>
+                    <div class="kpi-value negative" id="mcVaR">—</div>
+                    <div class="kpi-sub">Perte max probable</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Médiane</div>
+                    <div class="kpi-value" id="mcMedian">—</div>
+                    <div class="kpi-sub" id="mcMedianBH">B&H: —</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Best Case (P95)</div>
+                    <div class="kpi-value positive" id="mcBestCase">—</div>
+                    <div class="kpi-sub">Scénario optimiste</div>
+                </div>
+            </div>
+
+            <div class="two-col">
+                <div class="chart-container">
+                    <div class="chart-title">Trajectoires Simulées (échantillon)</div>
+                    <div id="mcTrajectoriesChart" style="height: 350px;">
+                        <div class="empty-state"><p>Cliquez sur SIMULER</p></div>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Distribution des Rendements</div>
+                    <div id="mcDistributionChart" style="height: 350px;">
+                        <div class="empty-state"><p>—</p></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">Comparaison Stratégie vs Buy & Hold</div>
+                <div id="mcComparisonChart" style="height: 300px;">
+                    <div class="empty-state"><p>—</p></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
